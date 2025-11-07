@@ -7,4 +7,4 @@ requests
 fpdf2
 matplotlib
 qrcode[pil]
-google-generativeai
+google-generativeai==0.6.1
