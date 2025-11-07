@@ -1,0 +1,10 @@
+streamlit
+pandas
+numpy
+scikit-learn
+joblib
+requests
+fpdf2
+matplotlib
+qrcode[pil]
+google-generativeai
