@@ -18,48 +18,28 @@ LANGS = {
     "Tamil": "ta",
 }
 
-# =========================
-# GEMINI (REST API) — no SDK
-# =========================
-def gemini_generate_text(prompt: str, api_key: str, model: str = "gemini-1.5-flash") -> str:
-    """Call Gemini via REST API; robust to Cloud environments."""
+def gemini_generate_text(prompt: str, api_key: str):
     if not api_key:
-        return "(Gemini not configured — add GEMINI_API_KEY in Secrets)"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+        return "(Gemini not configured)"
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key={api_key}"
+    
     headers = {"Content-Type": "application/json"}
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+
+    payload = {
+        "contents": [
+            {"parts": [{"text": prompt}]}
+        ]
+    }
+
     try:
-        r = requests.post(url, headers=headers, data=json.dumps(payload), timeout=60)
+        r = requests.post(url, headers=headers, json=payload, timeout=60)
         data = r.json()
+        
         return data["candidates"][0]["content"]["parts"][0]["text"]
+
     except Exception as e:
-        try:
-            return f"(Gemini error: {r.status_code} {r.text})"
-        except:
-            return f"(Gemini error: {e})"
-
-def build_advisory(language_label: str, user_inputs: dict, preds: dict, api_key: str) -> str:
-    # If non-English, request full translation in the final output
-    translate = "" if language_label == "English" else f"Translate the full final report into {language_label}."
-    prompt = f"""
-You are a senior agronomist. Produce a concise, farmer-friendly report.
-
-FARM DATA:
-{json.dumps(user_inputs, ensure_ascii=False, indent=2)}
-
-AI PREDICTIONS:
-{json.dumps(preds, ensure_ascii=False, indent=2)}
-
-Write sections with short bullet points:
-1) Summary
-2) Soil Health (what it means)
-3) Recommended Crop (why suitable)
-4) Fertilizer Plan (actions & schedule)
-5) Weather/Irrigation Tips
-6) Risks & Mitigation
-Keep it practical and locally relevant. {translate}
-"""
-    return gemini_generate_text(prompt, api_key)
+        return f"(Gemini error: {r.status_code if 'r' in locals() else ''} {str(e)})"
 
 # =========================
 # MODELS — Google Drive
