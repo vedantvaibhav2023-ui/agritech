@@ -1,5 +1,5 @@
-# AgriIntel — Simple UI + A4 PDF + Google Drive Models + Gemini 1.5 Pro
-# Deploy-ready Streamlit app
+# AgriIntel — Simple UI • A4 PDF • Seasonal • Google Drive Models • Gemini 1.5 Pro
+# Deploy-ready Streamlit app (no escape characters).
 
 import os, io, tempfile, textwrap, datetime as dt
 import requests, pandas as pd, numpy as np, joblib, qrcode
@@ -75,11 +75,13 @@ if GKEY:
     genai.configure(api_key=GKEY)
     GEM = genai.GenerativeModel("gemini-1.5-pro")
 
-def gemini_advisory(lang_label, user_data: dict, preds: dict) -> str:
+def gemini_advisory(lang_label: str, user_data: dict, preds: dict) -> str:
     if not GEM:
         return "(Gemini not configured — add GEMINI_API_KEY in Secrets)"
     translate = "" if lang_label == "English" else f"Translate the final report into {lang_label} only (no code-switching)."
-    prompt = f\"\"\"You are a senior agronomist. Produce a concise, farmer-friendly report.
+
+    prompt = f"""
+You are a senior agronomist. Produce a concise, farmer-friendly report.
 
 FARM DATA:
 {user_data}
@@ -97,7 +99,7 @@ Write these sections in Markdown:
 7) Expected Yield & Risks
 
 Keep it actionable, clear, and localized. {translate}
-\"\"\"
+"""
     try:
         r = GEM.generate_content(prompt)
         return (r.text or "").strip()
@@ -209,7 +211,7 @@ def _save_fig(fig):
 
 def chart_temp(df):
     if df.empty: return ""
-    fig, ax = plt.subplots(figsize=(7.5,3))
+    fig, ax = plt.subplots(figsize=(7.8,3.2))
     ax.plot(pd.to_datetime(df["date"]), df["tmax"], label="Tmax (°C)")
     ax.plot(pd.to_datetime(df["date"]), df["tmin"], label="Tmin (°C)")
     ax.legend(); ax.set_title("16-Day Temperature"); ax.set_ylabel("°C")
@@ -218,14 +220,36 @@ def chart_temp(df):
 
 def chart_rain(df):
     if df.empty: return ""
-    fig, ax = plt.subplots(figsize=(7.5,3))
+    fig, ax = plt.subplots(figsize=(7.8,3.2))
     ax.bar(pd.to_datetime(df["date"]), df["precip"])
     ax.set_title("16-Day Rainfall (mm)"); ax.set_ylabel("mm")
     fig.autofmt_xdate()
     return _save_fig(fig)
 
+def chart_season_temp(dfm):
+    if dfm.empty: return ""
+    fig, ax = plt.subplots(figsize=(7.8,3.2))
+    ax.plot(pd.to_datetime(dfm["month"]), dfm["t_mean"], marker="o")
+    ax.set_title("Seasonal Mean Temperature (°C)"); ax.set_ylabel("°C")
+    fig.autofmt_xdate()
+    return _save_fig(fig)
+
+def chart_season_rain(dfm):
+    if dfm.empty: return ""
+    fig, ax = plt.subplots(figsize=(7.8,3.2))
+    ax.bar(pd.to_datetime(dfm["month"]), dfm["p_sum"])
+    ax.set_title("Seasonal Total Rainfall (mm)"); ax.set_ylabel("mm")
+    fig.autofmt_xdate()
+    return _save_fig(fig)
+
+def chart_npk(n,p,k):
+    fig, ax = plt.subplots(figsize=(5.4,3.0))
+    ax.bar(["N","P","K"], [n,p,k])
+    ax.set_title("NPK Recommendation (kg/ha)")
+    return _save_fig(fig)
+
 # ---------------------------
-# PDF (A4, simple & clean)
+# PDF (A4)
 # ---------------------------
 def wrap_text(t, width=95):
     out = []
@@ -251,7 +275,7 @@ def build_pdf(payload: dict) -> bytes:
     pdf.set_left_margin(20); pdf.set_right_margin(20)
     SAFE_W = 170  # A4 width 210 - 40 margins
 
-    # Cover (simple A4)
+    # Cover
     pdf.set_font("DejaVu", size=22)
     pdf.cell(SAFE_W, 12, f"{APP_NAME} Advisory Report", ln=True, align="C")
     pdf.set_font("DejaVu", size=12)
@@ -268,8 +292,8 @@ def build_pdf(payload: dict) -> bytes:
     pdf.multi_cell(SAFE_W, 7, f"Soil Health: {payload['soil']}")
     pdf.multi_cell(SAFE_W, 7, f"Predicted Yield: {payload['yield']} t/ha")
     fert = payload["fert"]
-    p_label = f\"P={fert['P']} kg/ha (reduce)\" if fert['P'] < 0 else f\"P={fert['P']} kg/ha\"
-    pdf.multi_cell(SAFE_W, 7, f\"Fertilizer Plan: N={fert['N']} kg/ha | {p_label} | K={fert['K']} kg/ha\")
+    p_label = f"P={fert['P']} kg/ha (reduce)" if fert['P'] < 0 else f"P={fert['P']} kg/ha"
+    pdf.multi_cell(SAFE_W, 7, f"Fertilizer Plan: N={fert['N']} kg/ha | {p_label} | K={fert['K']} kg/ha")
 
     # Weather
     pdf.ln(3); pdf.set_font("DejaVu", size=16); pdf.cell(SAFE_W, 10, "Weather (Now)", ln=True)
@@ -279,16 +303,27 @@ def build_pdf(payload: dict) -> bytes:
     pdf.multi_cell(SAFE_W, 7, f"Humidity: {cur.get('h')} %")
     pdf.multi_cell(SAFE_W, 7, f"Precipitation: {cur.get('r')} mm")
 
-    # Charts (single page, simple A layout)
+    # 16-day Charts
     if payload.get("temp_chart") or payload.get("rain_chart"):
         pdf.add_page()
-        pdf.set_font("DejaVu", size=16); pdf.cell(SAFE_W, 10, "Forecast Charts", ln=True)
+        pdf.set_font("DejaVu", size=16); pdf.cell(SAFE_W, 10, "16-Day Forecast Charts", ln=True)
         if payload.get("temp_chart") and os.path.exists(payload["temp_chart"]):
             pdf.ln(2); pdf.image(payload["temp_chart"], w=SAFE_W)
         if payload.get("rain_chart") and os.path.exists(payload["rain_chart"]):
             pdf.ln(4); pdf.image(payload["rain_chart"], w=SAFE_W)
 
-    # Advisory
+    # Seasonal Charts
+    if payload.get("season_temp_chart") or payload.get("season_rain_chart") or payload.get("npk_chart"):
+        pdf.add_page()
+        pdf.set_font("DejaVu", size=16); pdf.cell(SAFE_W, 10, "Seasonal Outlook & NPK", ln=True)
+        if payload.get("season_temp_chart") and os.path.exists(payload["season_temp_chart"]):
+            pdf.ln(2); pdf.image(payload["season_temp_chart"], w=SAFE_W)
+        if payload.get("season_rain_chart") and os.path.exists(payload["season_rain_chart"]):
+            pdf.ln(4); pdf.image(payload["season_rain_chart"], w=SAFE_W)
+        if payload.get("npk_chart") and os.path.exists(payload["npk_chart"]):
+            pdf.ln(4); pdf.image(payload["npk_chart"], w=SAFE_W/2)
+
+    # AI Advisory
     pdf.add_page()
     pdf.set_font("DejaVu", size=16); pdf.cell(SAFE_W, 10, "AI Advisory", ln=True)
     pdf.set_font("DejaVu", size=10)
@@ -298,7 +333,7 @@ def build_pdf(payload: dict) -> bytes:
     # QR
     pdf.add_page()
     pdf.set_font("DejaVu", size=16); pdf.cell(SAFE_W, 10, "Open App", ln=True)
-    url = os.getenv("APP_URL", "https://share.streamlit.io/")
+    url = os.getenv("APP_URL", "https://agritech-qktplbnzbgow5wccjg9qee.streamlit.app/")
     pdf.set_font("DejaVu", size=11)
     pdf.multi_cell(SAFE_W, 7, f"Scan to open: {url}")
     img = qrcode.make(url)
@@ -317,7 +352,7 @@ sel = st.sidebar.selectbox("Language", list(LANG.keys()))
 L = LANG[sel]
 
 st.title(L["title"])
-st.caption("Simple, multilingual, Gemini-powered advisory with A4 PDF.")
+st.caption("Simple, multilingual, Gemini-powered advisory with A4 PDF and seasonal outlook.")
 
 st.sidebar.header(L["sidebar"])
 region = st.sidebar.text_input(L["region"], "Pune, India")
@@ -339,7 +374,7 @@ if st.sidebar.button(L["gen"]):
     soil = predict_soil(N, P, K, PH)
     ypred = predict_yield(crop, **fields)
 
-    # weather
+    # weather + seasonal
     cur = {"t": None, "h": None, "r": None}
     name, cc, lat, lon = region, "", None, None
     try:
@@ -354,13 +389,28 @@ if st.sidebar.button(L["gen"]):
             "tmin": d.get("temperature_2m_min", []),
             "precip": d.get("precipitation_sum", []),
         })
+        seas = get_seasonal(lat, lon)
+        dfm = pd.DataFrame()
+        if seas and "monthly" in seas:
+            m = seas["monthly"]
+            dfm = pd.DataFrame({
+                "month": m.get("time", []),
+                "t_mean": m.get("temperature_2m_mean", []),
+                "p_sum": m.get("precipitation_sum", []),
+            }).head(3)
+        else:
+            dfm = pd.DataFrame()
     except Exception as e:
         st.warning(f"Weather lookup issue: {e}")
         df16 = pd.DataFrame(columns=["date","tmax","tmin","precip"])
+        dfm = pd.DataFrame()
 
     # charts
     temp_chart = chart_temp(df16)
     rain_chart = chart_rain(df16)
+    season_temp_chart = chart_season_temp(dfm)
+    season_rain_chart = chart_season_rain(dfm)
+    npk_chart = chart_npk(fert["N"], fert["P"], fert["K"])
 
     # advisory
     user_data = f"N={N}, P={P}, K={K}, pH={PH}, Temp={T}, Hum={H}, Rain={R}, Region={region}"
@@ -390,6 +440,9 @@ if st.sidebar.button(L["gen"]):
         "cur": cur,
         "temp_chart": temp_chart,
         "rain_chart": rain_chart,
+        "season_temp_chart": season_temp_chart,
+        "season_rain_chart": season_rain_chart,
+        "npk_chart": npk_chart,
         "advisory": advisory
     })
     st.download_button("⬇️ Download A4 PDF", data=pdf_bytes, file_name="AgriIntel_Report_A4.pdf", mime="application/pdf")
