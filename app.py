@@ -83,9 +83,8 @@ GKEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
 
 GEM = None
 if GKEY:
-    genai.configure(api_key=GKEY)
-    GEM = genai.GenerativeModel("gemini-1.5-flash")
-
+   genai.configure(api_key=GKEY)
+GEM = genai.GenerativeModel("gemini-pro")   # <--- WORKING ON STREAMLIT CLOUD
 
 # Generate AI Advisory
 def gemini_advisory(lang_label, user_data, preds):
